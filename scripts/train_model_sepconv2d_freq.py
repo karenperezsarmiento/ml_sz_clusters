@@ -24,33 +24,34 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.layers.experimental.preprocessing import Normalization
 import argparse as ap
 import re
+import time
 
 parser = ap.ArgumentParser(description="Train CNN")
 parser.add_argument("-if","--input_file",type=str,help="Name of input dataset file")
 parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout     (1 or 3)")
-parser.add_argument("-fq","--frequency",type=int,help="Frequency of CMB+Compton-y map (93,145,217)")
 parser.add_argument("-af","--activation_func",type=str,help="Activation function in CNN (relu,selu,linear,etc)")
 args = parser.parse_args()
 input_fn = args.input_file
 nchannels = args.num_channels
-freq = args.frequency
 act_func = args.activation_func
 infile = "../data/"+input_fn
 
 data = load_dataset("json",data_files=infile,split="train")
 
-freq_key = "tot_"+str(freq)
+batch_sz = 64
+
+freq_key = "tot"
 train_testvalid = data.train_test_split(test_size=0.1)
 df_train = train_testvalid["train"].to_tf_dataset(
     columns=[freq_key],
     label_cols=["tsz_8192"],
-    batch_size=2,
+    batch_size=batch_sz,
     prefetch=False,
     shuffle=True)
 df_test = train_testvalid["test"].to_tf_dataset(
     columns=[freq_key],
     label_cols=["tsz_8192"],
-    batch_size=2,
+    batch_size=batch_sz,
     prefetch=False,
     shuffle=False)
 
@@ -280,44 +281,68 @@ def ResUNet(img_shape):
 
 model = ResUNet((64,64,nchannels))
 print (model.summary())
+
+cp_path = "../checkpoints/"+act_func+"/sep_conv2d_"+act_func+"_"+re.sub(".jsonl","",input_fn)+"_cp-{epoch:04d}.ckpt"
+cp_callback = tf.keras.callbacks.ModelCheckpoint(cp_path,save_weights_only=True,verbose=1,save_freq='epoch')
+
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_delta=1e-10, cooldown=1, min_lr=0.)
+
+class PrintLR(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        print('\nLearning rate for epoch {} is {}'.format(epoch + 1, model.optimizer.lr.numpy()))
+
+class PrintLoss(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch > 2:
+            print('\nLoss for epoch {} is {}'.format(epoch + 1, model.history.history['loss'][-1]))
+
+callbacks_list = [cp_callback, reduce_lr, PrintLR()]
+
+
 opt = Adam(learning_rate = 1e-5)
 model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
 
 # Train the model on all available devices.
-history = model.fit(df_train, validation_data=df_test, epochs=300)
+history = model.fit(df_train, validation_data=df_test, epochs=70,callbacks=callbacks_list)
 ofile = re.sub(".jsonl",".keras",input_fn)
 pltfile = re.sub(".jsonl",".png",input_fn)
-ofile = "../models/sep_conv2d_"+act_func+"_"+str(freq)+"_"+ofile
-pltfile = "../plots/sep_conv2d_"+act_func+"_"+str(freq)+"_"+pltfile
+ofile = "../models/sep_conv2d_"+act_func+"_"+ofile
+pltfile = "../plots/sep_conv2d_"+act_func+"_"+pltfile
 model.save(ofile)
 
-i = 0
-for inputs,labels in df_test.map(lambda x,y: (x,y)):
-    ifile = "../test_imgs/"+str(i)+"_input_sep_conv2d_"+act_func+"_"+str(freq)+".png"
-    outfile = "../test_imgs/"+str(i)+"_label_sep_conv2d_"+act_func+"_"+str(freq)+".png"
-    fig = plt.figure()
-    larr = labels.numpy()
-    plt.imshow(larr.reshape(64,64))
-    plt.savefig(outfile)
-    plt.close(fig)
-    iarr = inputs.numpy() 
-    iarr = iarr[0,:,:,0]
-    fig = plt.figure()
-    plt.imshow(iarr.reshape(64,64))
-    plt.savefig(ifile)  
-    plt.close(fig)
-    i += 1
 
-predictions = model.predict(df_test)
+i = 0
+flabels = {2:"93",3:"145",4:"217"}
+ifile = re.sub(".jsonl","",input_fn)
+for inputs,labels in df_test.map(lambda x,y: (x,y)):
+    larr = labels.numpy()
+    iarr = inputs.numpy()
+    for l in range(larr.shape[0]):
+        outfile = "../test_imgs/"+ifile + str(i)+"_label_sep_conv2d_"+act_func+".png"
+        fig = plt.figure()
+        plt.imshow(larr[l].reshape(64,64))
+        plt.savefig(outfile)
+        plt.close(fig)
+        for f in [2,3,4]:
+            infile = "../test_imgs/"+ifile + str(i)+"_freq_"+flabels[f]+"_input_sep_conv2d_"+act_func+".png"
+            fig = plt.figure()
+            plt.imshow(iarr[l,:,:,f].reshape(64,64))
+            plt.savefig(infile)
+            plt.close(fig)
+        i+=1
+
+predictions = model.predict(df_test,batch_size = batch_sz)
 
 for i in range(predictions.shape[0]):
-    outfile = "../test_imgs/"+str(i)+"_predict_sep_conv2d_"+act_func+"_"+str(freq)+".png"
+    outfile = "../test_imgs/"+ifile+str(i)+"_predict_sep_conv2d_"+act_func+".png"
     fig = plt.figure()
     plt.imshow(predictions[i].reshape(64,64)) 
     plt.savefig(outfile)
     plt.close(fig)
+
                     
-history= model.history
+#history= model.history
+print(history.history.keys())
 fig = plt.figure()  
 plt.plot(np.array(history.history['loss']), color='blue', label='Training loss');
 plt.yscale('log') #  training sample is 4 times larger

@@ -40,13 +40,13 @@ train_testvalid = data.train_test_split(test_size=0.1)
 df_train = train_testvalid["train"].to_tf_dataset(
     columns=["tot_93"],
     label_cols=["tsz_8192"],
-    batch_size=2,
+    batch_size=32,
     prefetch=False,
     shuffle=True)
 df_test = train_testvalid["test"].to_tf_dataset(
     columns=["tot_93"],
     label_cols=["tsz_8192"],
-    batch_size=2,
+    batch_size=32,
     prefetch=False,
     shuffle=False)
 
@@ -280,7 +280,7 @@ opt = Adam(learning_rate = 1e-5)
 model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
 
 # Train the model on all available devices.
-history = model.fit(df_train, validation_data=df_test, epochs=300)
+history = model.fit(df_train, validation_data=df_test, epochs=30)
 ofile = re.sub(".jsonl",".keras",input_fn)
 pltfile = re.sub(".jsonl",".png",input_fn)
 ofile = "../models/sep_conv2d_"+ofile

@@ -2,3 +2,9 @@ output_sh/*
 data/*
 models/*
 websky/*
+test_imgs/*
+test_imgs_temp_linear/*
+test_imgs_temp_selu/*
+sehgal/*
+checkpoints/*
+

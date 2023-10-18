@@ -13,7 +13,7 @@ print("Initialized")
 parser = ap.ArgumentParser(description="Create cutouts around websky halos to use as input in CNN")
 parser.add_argument("-of","--output_file",type=str,help="Name of output file")
 parser.add_argument("-s","--size",type=str,help="Size of output dataset (mini,small or full")
-parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in output cutout (1 or 3)")
+parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in output cutout (1 or 3 or 5)")
 args = parser.parse_args()
 output_fn = args.output_file
 output_sz = args.size
@@ -76,25 +76,32 @@ else:
     osize = len(ra)
 with jsonlines.open(ofn,mode="w") as write_file:
     for i in range(osize):
-        if nchannels == 3:
+        if (nchannels == 3) or (nchannels == 5):
             z_norm = z[i]/z_max
             m200_norm = (m200[i]-mass_min)/(mass_max-mass_min)
             z_cutout = np.ones((64,64))*z_norm
             m_cutout = np.ones((64,64))*m200_norm 
+            cutout_out = np.dstack((m_cutout,z_cutout))
         cutout_dict = {}
         cutout_dict["name"]=str(idx[i])
-        for k in maps_dict.keys():
+        if (nchannels == 1) or (nchannels == 3):
+            list_freqs = ["tot_93"]
+        elif nchannels == 5:
+            list_freqs = ["tot_93","tot_145","tot_217"]
+        for k in list_freqs:
             cutout = get_cutouts(ra[i],dec[i],maps_dict[k]["p_map"],width=width,res=res)
             cutout = cutout[:64,:64]
             cutout_norm = (cutout - maps_dict[k]["min"])/(maps_dict[k]["max"]-maps_dict[k]["min"])
-            if nchannels == 3:
-                if k != "tsz_8192":
-                    cutout_out = np.dstack((cutout_norm,m_cutout,z_cutout)) 
-                else:
-                    cutout_out = cutout_norm
-            else:
+            if (nchannels == 5) or (nchannels == 3):
+                cutout_out = np.dstack((cutout_out,cutout_norm))
+            elif nchannels == 1:
                 cutout_out = cutout_norm
-            cutout_dict[k] = cutout_out.tolist()
+        
+        cutout_dict["tot"] = cutout_out.tolist()
+        cutout_label = get_cutouts(ra[i],dec[i],maps_dict["tsz_8192"]["p_map"],width=width,res=res)
+        cutout_label = cutout_label[:64,:64]
+        cutout_label_norm = (cutout_label - maps_dict["tsz_8192"]["min"])/(maps_dict["tsz_8192"]["max"]-maps_dict["tsz_8192"]["min"])
+        cutout_dict["tsz_8192"] = cutout_label_norm.tolist()
         write_file.write(cutout_dict)
 
 write_file.close()
