@@ -7,4 +7,12 @@ test_imgs_temp_linear/*
 test_imgs_temp_selu/*
 sehgal/*
 checkpoints/*
-
+**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__**/.ipynb_checkpoints
+**/__pycache__
