@@ -5,6 +5,7 @@ websky/*
 test_imgs/*
 test_imgs_temp_linear/*
 test_imgs_temp_selu/*
+sehgal_imgs_temp_linear/*
 sehgal/*
 checkpoints/*
 **/.ipynb_checkpoints

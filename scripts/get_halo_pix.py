@@ -5,7 +5,7 @@ import pandas as pd
 import astropy.table as table
 
 rho = 2.775e11*omegam*h**2
-f=open('../websky/halos.pksc')
+f=open('/data5/sims/websky/data/halos.pksc')
 N=np.fromfile(f,count=3,dtype=np.int32)[0]
 
 catalog = np.fromfile(f,count=N*10,dtype=np.float32)
@@ -40,7 +40,7 @@ for i in range(len(raDeg)):
     n = 'MOCK-CL_'+ str(i)
     names.append(n)
 
-outFileName="../websky/halos.fits"
+outFileName="/data6/kaper/ml_sz_clusters/websky/halos.fits"
 tab = table.Table()
 tab.add_column(table.Column(names, 'name'))
 tab.add_column(table.Column(raDeg, 'RADeg'))

@@ -10,88 +10,43 @@ import jsonlines
 import argparse as ap
 
 print("Initialized")
-parser = ap.ArgumentParser(description="Create cutouts around websky halos to use as input in CNN")
+parser = ap.ArgumentParser(description="Create cutouts around sehgal halos to use as input in CNN")
+parser.add_argument("-of","--output_file",type=str,help="Name of output file")
 parser.add_argument("-s","--size",type=str,help="Size of output dataset (mini,small or full")
 parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in output cutout (1 or 3 or 5)")
-parser.add_argument("-ns","--noise",type=str,help="Include noise")
-parser.add_argument("-bm","--beam",type=str,help="Include beam")
-parser.add_argument("-nl","--noise_level",type=float,help="Noise level (ignored if ns is false)")
+parser.add_argument("-ns","--noise",type=bool,help="Include noise")
+parser.add_argument("-bm","--beam",type=bool,help="Include beam")
 args = parser.parse_args()
+output_fn = args.output_file
 output_sz = args.size
 nchannels = args.num_channels
 noise = args.noise
 beam = args.beam
-noise_level = args.noise_level
-if noise == "True":
-    noise = True
-else:
-    noise = False
-if beam == "True":
-    beam = True
-else:
-    beam = False
-output_fn = output_sz+"_"+str(nchannels)+"ch"
-if beam:
-    output_fn = output_fn+"_b"
-if noise:
-    output_fn = output_fn+"_n"
-    output_fn = output_fn+str(int(noise_level))
-output_fn = output_fn+".jsonl"
 print("output filename "+output_fn)
 print("size of dataset "+output_sz)
 print("num channels "+str(nchannels))
-print("include noise "+str(noise))
-print("include beam "+str(beam))
-print("If noise, then noise level set to "+str(noise_level))
 
 res = np.deg2rad(0.5 / 60.)
 
-tot_145_map = "/data6/kaper/ml_sz_clusters/websky/tot_145.fits"
-tot_93_map = "/data6/kaper/ml_sz_clusters/websky/tot_93.fits"
-tot_217_map = "/data6/kaper/ml_sz_clusters/websky/tot_217.fits"
+tot_145_map = "/data6/kaper/ml_sz_clusters/sehgal/tot_145.fits"
+tot_93_map = "/data6/kaper/ml_sz_clusters/sehgal/tot_93.fits"
+tot_217_map = "/data6/kaper/ml_sz_clusters/sehgal/tot_217.fits"
 
-tsz_map = "/data6/kaper/ml_sz_clusters/websky/tsz_8192.fits"
-halo_coords = "/data6/kaper/ml_sz_clusters/websky/halos.fits"
+tsz_map = "/data5/sims/sehgal/data/tSZ_skymap_healpix_nopell_Nside4096_y_tSZrescale0p75.fits"
+halo_coords = "/data5/sims/sehgal/data/halo_nbody.ascii"
 width = 16*utils.arcmin
 
-z_max = 4.6
+z_max = 3
 mass_min = 0.5e14
 mass_max = 1e15
-
-beam_dict = {"tot_93":2.2,"tot_145":1.4,"tot_217":1.0,"tsz_8192":2.2}
-#noise_val = 10 #uK*arcmin default noise level
-
-def gauss_beam(ell,fwhm):
-    tht_fwhm= np.deg2rad(fwhm/60.)
-    return np.exp(-(tht_fwhm**2.)*(ell**2.) / (16.*np.log(2.)))
-
-def conv_beam_noise(p_map,freq,add_noise,noise_level):
-    shape,wcs = enmap.fullsky_geometry(res=res)
-    imap = enmap.zeros(shape, wcs=wcs)
-    alm = pixell.curvedsky.map2alm(p_map,lmax=10000)
-    alm_conv = pixell.curvedsky.almxfl(alm,lambda ell:gauss_beam(ell,beam_dict[freq]))
-    p_map_beam = pixell.curvedsky.alm2map(alm_conv,imap)
-    if add_noise:
-        dra, ddec = wcs.wcs.cdelt*utils.degree
-        dec = enmap.posmap([shape[-2],1],wcs)[0,:,0]
-        area = np.abs(dra*(np.sin(np.minimum(np.pi/2.,dec+ddec/2))-np.sin(np.maximum(-np.pi/2.,dec-ddec/2))))
-        Nx = shape[-1]
-        a_rad_map = enmap.ndmap(area[...,None].repeat(Nx,axis=-1),wcs)
-        arm_rad_map = a_rad_map*((180.*60./np.pi)**2.)
-        div = arm_rad_map/noise_level**2.
-        seed = 8192
-        np.random.seed(seed)
-        w_n_map = np.random.standard_normal(shape) / np.sqrt(div)
-        p_map_out = p_map_beam + w_n_map
-    else:
-        p_map_out = p_map_beam
-    return p_map_out
 
 def healpy_2_pixell(filename,res):
     shape,wcs = enmap.fullsky_geometry(res=res)
     h_map = hp.read_map(filename).astype(np.float64)
     p_map = reproject.healpix2map(h_map,shape=shape,wcs=wcs)
-    return p_map
+    min_val = np.min(p_map)
+    max_val = np.max(p_map)
+    return p_map, min_val, max_val
 
 def get_cutouts(ra,dec,p_map,width=10.0*utils.arcmin,res=res):
     ra,dec = ra*u.deg,dec*u.deg
@@ -99,27 +54,20 @@ def get_cutouts(ra,dec,p_map,width=10.0*utils.arcmin,res=res):
     return cutouts
 
 def load_coords(coord_file):
-    hdul = fits.open(coord_file)
-    data = hdul[1].data 
-    return data["name"],data["RADeg"],data["decDeg"],data["M200m"],data["z"]
+    f_coords = open(coord_file,'r')
+    data = np.genfromtxt(f_coords)
+    return np.arange(len(data)),data[:,1],data[:,2],data[:,12],data[:,0]
 
 idx,ra,dec,m200,z = load_coords(halo_coords)
 
 maps_dict = {}
+#fix key for tsz column --- generalize websky and sehgal script
 files = ["tot_93","tot_145","tot_217","tsz_8192"]
 for i in files:
-    f = "/data6/kaper/ml_sz_clusters/websky/"+ i + ".fits"
-    p_map = healpy_2_pixell(f,res)
-    if beam & (i!="tsz_8192"):
-        p_map_out = conv_beam_noise(p_map,freq = i,add_noise = noise, noise_level=noise_level)
-    elif beam & (i=="tsz_8192"):
-        p_map_out = conv_beam_noise(p_map,freq = i,add_noise = False, noise_level=noise_level)   
-    else:
-        p_map_out = p_map
-    min_val = np.min(p_map_out)
-    max_val = np.max(p_map_out)
+    f = "/data6/kaper/ml_sz_clusters/sehgal/"+ i + ".fits"
+    p_map, min_val, max_val = healpy_2_pixell(f,res)
     maps_dict[i] = {
-        "p_map" : p_map_out,
+        "p_map" : p_map,
         "min" : min_val,
         "max" : max_val,    
     }
