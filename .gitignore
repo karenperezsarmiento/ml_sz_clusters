@@ -2,9 +2,11 @@ output_sh/*
 data/*
 models/*
 websky/*
+plots/*
 test_imgs/*
 test_imgs_temp_linear/*
 test_imgs_temp_selu/*
+test_imgs_temp_linear_offset/*
 sehgal/*
 checkpoints/*
 **/.ipynb_checkpoints
