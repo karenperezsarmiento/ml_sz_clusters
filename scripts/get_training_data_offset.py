@@ -30,12 +30,12 @@ print("include beam "+str(beam))
 
 res = np.deg2rad(0.5 / 60.)
 
-tot_145_map = "/home3/kaper/ml_sz_clusters/websky/tot_145.fits"
-tot_93_map = "/home3/kaper/ml_sz_clusters/websky/tot_93.fits"
-tot_217_map = "/home3/kaper/ml_sz_clusters/websky/tot_217.fits"
+tot_145_map = "/data6/kaper/ml_sz_clusters/websky/tot_145.fits"
+tot_93_map = "/data6/kaper/ml_sz_clusters/websky/tot_93.fits"
+tot_217_map = "/data6/kaper/ml_sz_clusters/websky/tot_217.fits"
 
-tsz_map = "/home3/kaper/ml_sz_clusters/websky/tsz_8192.fits"
-halo_coords = "/home3/kaper/ml_sz_clusters/websky/halos.fits"
+tsz_map = "/data6/kaper/ml_sz_clusters/websky/tsz_8192.fits"
+halo_coords = "/data6/kaper/ml_sz_clusters/websky/halos.fits"
 width = 16*utils.arcmin
 
 z_max = 4.6
@@ -84,7 +84,7 @@ idx,ra,dec,m200,z = load_coords(halo_coords)
 maps_dict = {}
 files = ["tot_93","tot_145","tot_217","tsz_8192"]
 for i in files:
-    f = "/home3/kaper/ml_sz_clusters/websky/"+ i + ".fits"
+    f = "/data6/kaper/ml_sz_clusters/websky/"+ i + ".fits"
     p_map, min_val, max_val = healpy_2_pixell(f,res)
     if beam & (i!="tsz_8192"):
         p_map_out = conv_beam_noise(p_map,freq = i,add_noise = noise)
@@ -117,7 +117,7 @@ with jsonlines.open(ofn,mode="w") as write_file:
             list_freqs = ["tot_93"]
         elif nchannels == 5:
             list_freqs = ["tot_93","tot_145","tot_217"]
-        max_offset = (16*u.arcmin/2).to(u.radian)
+        max_offset = (16*u.arcmin).to(u.radian)
         ra_offset = max_offset*np.random.uniform(-1,1,1)[0]
         dec_offset = max_offset*np.random.uniform(-1,1,1)[0]
         cutout_dict["offset"] = (dec_offset.to(u.radian).value, ra_offset.to(u.radian).value)
