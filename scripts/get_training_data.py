@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import json
 import jsonlines
 import argparse as ap
+from orphics import io
 
 print("Initialized")
 parser = ap.ArgumentParser(description="Create cutouts around websky halos to use as input in CNN")
@@ -16,12 +17,16 @@ parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in 
 parser.add_argument("-ns","--noise",type=str,help="Include noise")
 parser.add_argument("-bm","--beam",type=str,help="Include beam")
 parser.add_argument("-nl","--noise_level",type=float,help="Noise level (ignored if ns is false)")
+parser.add_argument("-ap","--apodization",type=str,help="Apodization type (None, (Square mask_min extent power), or (Pixell pix))")
 args = parser.parse_args()
 output_sz = args.size
 nchannels = args.num_channels
 noise = args.noise
 beam = args.beam
 noise_level = args.noise_level
+apod_str = args.apodization
+
+# Parse noise and beam arguments
 if noise == "True":
     noise = True
 else:
@@ -30,19 +35,68 @@ if beam == "True":
     beam = True
 else:
     beam = False
+
+
 output_fn = output_sz+"_"+str(nchannels)+"ch"
 if beam:
     output_fn = output_fn+"_b"
 if noise:
     output_fn = output_fn+"_n"
     output_fn = output_fn+str(int(noise_level))
+
+def make_square_mask_64_x_64(mask_min, extent, power=1):
+    mask_sqr = np.ones((64, 64))
+    d_max = float((extent**2)**power)
+    for i in range(32):
+        for j in range(32):
+            d = float((min(i**2, j**2, (63-i)**2, (63-j)**2))**power)
+            val = mask_min + (1.0-mask_min)*d/d_max
+            if val > 1.0: val = 1.0
+            mask_sqr[i, j] = val
+            mask_sqr[i, 63-j] = val
+            mask_sqr[63-i, j] = val
+            mask_sqr[63-i, 63-j] = val
+    return mask_sqr
+
+# Parse apodization arguments
+l = apod_str.split(" ")
+if l[0] == "None":
+    apod_info = {"mode":"None"}
+    output_fn = output_fn+"_noap"
+elif l[0] == "Square":
+    apod_mode = "Square"
+    try:
+        mask_min = float(l[1]) # The minimum value of the square mask
+        extent= float(l[2]) # Controls the distance at which pixels are affected
+        power = float(l[3])  # Controls the dependence on distance from the sides of the square mask
+    except:
+        raise ValueError("When passing in apodization type Square, it must be followed by three floats. For example: Square 0.1 5.0 2.0")
+    
+    # Make square mask
+    mask_sqr = make_square_mask_64_x_64(mask_min, extent, power)
+    apod_info = {"mode":"Square", "mask":mask_sqr} # Each 64x64 cutout is multiplied elementwise by this mask
+    output_fn = output_fn + "_sqrap_"+str(mask_min)+"_"+str(extent)+"_"+str(power)
+elif l[0] == "Pixell":
+    try:
+        pix = int(l[1])
+        apod_info = {"mode":"Pixell", "pix":pix} # Width in  pixels for apodization 
+    except:
+        raise ValueError("When passing in apodization type Pixell, it must be followed with an int. For example: Pixell 5")
+    output_fn = output_fn+"_pxlap_"+str(pix)
+else:
+    raise ValueError("Invalid apodization type. Must start with None, Square, or Pixell")
+
+identity = output_fn
 output_fn = output_fn+".jsonl"
+
+# Print parsed arguments
 print("output filename "+output_fn)
 print("size of dataset "+output_sz)
 print("num channels "+str(nchannels))
 print("include noise "+str(noise))
 print("include beam "+str(beam))
 print("If noise, then noise level set to "+str(noise_level))
+print("apod_info "+ str(apod_info))
 
 res = np.deg2rad(0.5 / 60.)
 
@@ -59,7 +113,6 @@ mass_min = 0.5e14
 mass_max = 1e15
 
 beam_dict = {"tot_93":2.2,"tot_145":1.4,"tot_217":1.0,"tsz_8192":2.2}
-#noise_val = 10 #uK*arcmin default noise level
 
 def gauss_beam(ell,fwhm):
     tht_fwhm= np.deg2rad(fwhm/60.)
@@ -93,10 +146,15 @@ def healpy_2_pixell(filename,res):
     p_map = reproject.healpix2map(h_map,shape=shape,wcs=wcs)
     return p_map
 
-def get_cutouts(ra,dec,p_map,width=10.0*utils.arcmin,res=res):
+def get_cutouts(ra,dec,p_map,width=10.0*utils.arcmin,res=res, apod_info={"mode":"None"}):
     ra,dec = ra*u.deg,dec*u.deg
     cutouts = reproject.thumbnails(p_map,(dec.to(u.radian).value,ra.to(u.radian).value),r=width,res=res)
-    return cutouts
+    cutout = np.array(cutouts[:64,:64])
+    if apod_info["mode"]=="Pixell":   #Pixell
+        cutout = pixell.enmap.apod(cutout, apod_info["pix"])
+    elif apod_info["mode"]=="Square":
+        cutout = np.multiply(cutout, apod_info["mask"])
+    return cutout
 
 def load_coords(coord_file):
     hdul = fits.open(coord_file)
@@ -116,6 +174,7 @@ for i in files:
         p_map_out = conv_beam_noise(p_map,freq = i,add_noise = False, noise_level=noise_level)   
     else:
         p_map_out = p_map
+    #io.plot_img(p_map_out,"/home3/avharris/ml_sz_clusters/data/debugging/"+identity+"_"+i+".png")
     min_val = np.min(p_map_out)
     max_val = np.max(p_map_out)
     maps_dict[i] = {
@@ -123,14 +182,23 @@ for i in files:
         "min" : min_val,
         "max" : max_val,    
     }
-    
-ofn = "/data6/kaper/ml_sz_clusters/datasets/"+output_fn
-if output_sz=="mini":
+    """
+    plt.hist(p_map_out[0].flatten())
+    plt.title("Histogram of p_map_out for "+i)
+    plt.savefig("/home3/avharris/ml_sz_clusters/data/debugging/"+identity+"p_map_out_hist_"+i+".png")
+    plt.close("all")
+    """
+
+ofn = "/data6/avharris/ml_sz_clusters/datasets/"+output_fn
+if output_sz=="tiny":
+    osize = 10
+elif output_sz=="mini":
     osize = 1000
 elif output_sz=="small":
     osize = 20000
 else:
     osize = len(ra)
+
 with jsonlines.open(ofn,mode="w") as write_file:
     for i in range(osize):
         if (nchannels == 3) or (nchannels == 5):
@@ -146,8 +214,7 @@ with jsonlines.open(ofn,mode="w") as write_file:
         elif nchannels == 5:
             list_freqs = ["tot_93","tot_145","tot_217"]
         for k in list_freqs:
-            cutout = get_cutouts(ra[i],dec[i],maps_dict[k]["p_map"],width=width,res=res)
-            cutout = cutout[:64,:64]
+            cutout = get_cutouts(ra[i],dec[i],maps_dict[k]["p_map"],width=width,res=res, apod_info=apod_info)
             cutout_norm = (cutout - maps_dict[k]["min"])/(maps_dict[k]["max"]-maps_dict[k]["min"])
             if (nchannels == 5) or (nchannels == 3):
                 cutout_out = np.dstack((cutout_out,cutout_norm))

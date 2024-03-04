@@ -33,12 +33,12 @@ for i in range(len(files)):
         "max" : max_val,
     }
 
-model_fn = "sep_conv2d_linear_small_5ch.keras"
+model_fn = "sep_conv2d_linear_small_5ch_b_n10_noap.keras"
 act_func = "linear"
-img_dir = "../test_imgs_temp_"+act_func+"/"
-r_model = keras.models.load_model("/data6/kaper/ml_sz_clusters/models/"+model_fn)
-input_fn = "high_offset_small_5ch.jsonl"
-data = load_dataset("json",data_files="../data/"+input_fn,split="train")
+img_dir = "../test_imgs_temp_" + act_func + "_200_epochs/"
+r_model = keras.models.load_model("/data6/avharris/ml_sz_clusters/models/"+model_fn)
+input_fn = "small_5ch_b_n5_noap.jsonl"
+data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")
 ifile = re.sub(".jsonl","",input_fn)
 
 """
@@ -61,7 +61,7 @@ train_testvalid = data.train_test_split(test_size=0.05)
 
 df_test = train_testvalid["test"].to_tf_dataset(
         columns=["tot"],
-        label_cols=["tsz_8192", "offset"],
+        label_cols=["tsz_8192"],
         batch_size=64,
         prefetch=False,
         shuffle=False)
@@ -76,16 +76,20 @@ sub_tot = {2:np.zeros((64,64)),3:np.zeros((64,64)),4:np.zeros((64,64))}
 sub_flat = {2:[],3:[],4:[]}
 sub_norms = {2:[], 3:[], 4:[]}
 res_norms = []    # the norm of all pixels in the residual
+"""
 off_norms = []    # the norm of the offset in radians. off_norm[i] corresponds to res_norm[i]
 off_vals = []     # the values of the offset in radians for the declination angle and the ascension angle
 off_vals.append([])   # off_norms[0][i] is the declination angle that corresponds to res_norms[i]
 off_vals.append([])   # off_norms[1][i] is the ascension angle that corresponds to res_norms[i]
+"""
 for inputs,labels in df_test.map(lambda x,y: (x,y)):
-    larr = np.array(labels["tsz_8192"])
+    larr = np.array(labels)
+    """
     offset = np.array(labels["offset"])
     off_vals[0].extend(offset[:,0])
     off_vals[1].extend(offset[:,1])
     off_norms.extend(np.linalg.norm(offset, axis = 1))
+    """
     iarr = inputs.numpy()
     for l in range(larr.shape[0]):
         resfile = img_dir+ifile + str(i)+"_res_sep_conv2d_"+act_func+".png"
@@ -152,6 +156,7 @@ for f in [2,3,4]:
     plt.close(fig)
 print("plots made")
 
+"""
 # Save important matrices to csv files
 # res_flat
 with open("../data/csv_files_"+act_func+"/"+ifile+"_res_flat.csv", "w", newline="") as f:
@@ -188,5 +193,5 @@ with open("../data/csv_files_"+act_func+"/"+ifile+"_off_norms.csv", "w", newline
 with open("../data/csv_files_"+act_func+"/"+ifile+"_off_vals.csv", "w", newline="") as f:
     writer=csv.writer(f)
     writer.writerows(off_vals)
-
+"""
 print("done")
