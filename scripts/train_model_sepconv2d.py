@@ -34,17 +34,20 @@ parser = ap.ArgumentParser(description="Train CNN, test and make plot")
 parser.add_argument("-if","--input_file",type=str,help="Name of input dataset file")
 parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 3 or 5)")
 parser.add_argument("-af","--activation_func",type=str,help="Activation function in CNN (relu,selu,linear,etc)")
+#parser.add_argument("-ep","--epochs", type=int,help="Number of epochs to train")
 args = parser.parse_args()
 input_fn = args.input_file
 nchannels = args.num_channels
 act_func = args.activation_func
+#num_epochs = args.epochs
 infile = "/data6/avharris/ml_sz_clusters/datasets/"+input_fn
 
 print("Before loading dataset: " + str(time.time()))
 data = load_dataset("json",data_files=infile,split="train")
+print(np.shape(np.array(data["tot"])))
 print("After loading dataset: " + str(time.time()))
 
-batch_sz = 64
+batch_sz = 1
 
 print("Before splitting dataset: " + str(time.time()))
 freq_key = "tot"
@@ -304,12 +307,14 @@ class PrintLoss(tf.keras.callbacks.Callback):
 callbacks_list = [cp_callback, reduce_lr, PrintLR()]
 
 
-print("Before compiling and fitting model: " + str(time.time()))
-opt = Adam(learning_rate = 1e-5)
+print("Before compiling model: " + str(time.time()))
+opt = Adam(learning_rate = 1e-3)
 model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
+print("After compiling model: " + str(time.time()))
 
 # Train the model on all available devices.
-history = model.fit(df_train, validation_data=df_test, epochs=200,callbacks=callbacks_list)
+print("Before fitting model: " + str(time.time()))
+history = model.fit(df_train, validation_data=df_test, epochs=5,callbacks=callbacks_list)
 print("After compiling and fitting model: " + str(time.time()))
 
 print("_______________________")

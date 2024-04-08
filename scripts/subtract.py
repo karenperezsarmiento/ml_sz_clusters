@@ -9,6 +9,16 @@ from pixell import reproject,enmap,utils
 import healpy as hp
 from scipy.stats import pearsonr
 import csv
+import argparse as ap
+
+parser = ap.ArgumentParser(description="Have a neural network predict true cmb from labels of a dataset")
+parser.add_argument("-md", "--model", type=str, help="Filename of model")
+parser.add_argument("-af", "--act_func", type=str, help="Activation function of model")
+parser.add_argument("-f", "--data_fn", type=str, help="Filename of dataset to predict from")
+args = parser.parse_args()
+model_fn = args.model
+act_func = args.act_func
+input_fn = args.data_fn
 
 res = np.deg2rad(0.5 / 60.)
 
@@ -33,11 +43,8 @@ for i in range(len(files)):
         "max" : max_val,
     }
 
-model_fn = "sep_conv2d_linear_small_5ch_b_n10_noap.keras"
-act_func = "linear"
-img_dir = "../test_imgs_temp_" + act_func + "_200_epochs/"
+img_dir = "../test_imgs_temp_" + act_func + "/"
 r_model = keras.models.load_model("/data6/avharris/ml_sz_clusters/models/"+model_fn)
-input_fn = "small_5ch_b_n5_noap.jsonl"
 data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")
 ifile = re.sub(".jsonl","",input_fn)
 

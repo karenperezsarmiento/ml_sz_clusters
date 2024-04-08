@@ -222,7 +222,7 @@ with jsonlines.open(ofn,mode="w") as write_file:
                 cutout_out = cutout_norm
         
         cutout_dict["tot"] = cutout_out.tolist()
-        cutout_label = get_cutouts(ra[i],dec[i],maps_dict["tsz_8192"]["p_map"],width=width,res=res)
+        cutout_label = get_cutouts(ra[i],dec[i],maps_dict["tsz_8192"]["p_map"],width=width,res=res, apod_info=apod_info)
         cutout_label = cutout_label[:64,:64]
         cutout_label_norm = (cutout_label - maps_dict["tsz_8192"]["min"])/(maps_dict["tsz_8192"]["max"]-maps_dict["tsz_8192"]["min"])
         cutout_dict["tsz_8192"] = cutout_label_norm.tolist()
