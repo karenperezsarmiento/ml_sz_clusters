@@ -28,28 +28,20 @@ import healpy as hp
 import re
 import time
 
-print("Start time: " + str(time.time()))
-
 parser = ap.ArgumentParser(description="Train CNN, test and make plot")
 parser.add_argument("-if","--input_file",type=str,help="Name of input dataset file")
 parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 3 or 5)")
 parser.add_argument("-af","--activation_func",type=str,help="Activation function in CNN (relu,selu,linear,etc)")
-#parser.add_argument("-ep","--epochs", type=int,help="Number of epochs to train")
 args = parser.parse_args()
 input_fn = args.input_file
 nchannels = args.num_channels
 act_func = args.activation_func
-#num_epochs = args.epochs
 infile = "/data6/avharris/ml_sz_clusters/datasets/"+input_fn
 
-print("Before loading dataset: " + str(time.time()))
 data = load_dataset("json",data_files=infile,split="train")
-print(np.shape(np.array(data["tot"])))
-print("After loading dataset: " + str(time.time()))
 
-batch_sz = 1
+batch_sz = 64
 
-print("Before splitting dataset: " + str(time.time()))
 freq_key = "tot"
 train_testvalid = data.train_test_split(test_size=0.1)
 df_train = train_testvalid["train"].to_tf_dataset(
@@ -64,7 +56,6 @@ df_test = train_testvalid["test"].to_tf_dataset(
     batch_size=batch_sz,
     prefetch=False,
     shuffle=False)
-print("After splitting dataset: " + str(time.time()))
 
 N_CLASSES = 1
 window_function = 3
@@ -307,15 +298,12 @@ class PrintLoss(tf.keras.callbacks.Callback):
 callbacks_list = [cp_callback, reduce_lr, PrintLR()]
 
 
-print("Before compiling model: " + str(time.time()))
-opt = Adam(learning_rate = 1e-3)
+opt = Adam(learning_rate = 1e-5)
 model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
-print("After compiling model: " + str(time.time()))
 
+print("Before fitting model")
 # Train the model on all available devices.
-print("Before fitting model: " + str(time.time()))
 history = model.fit(df_train, validation_data=df_test, epochs=5,callbacks=callbacks_list)
-print("After compiling and fitting model: " + str(time.time()))
 
 print("_______________________")
 print("Done fitting model")
@@ -344,7 +332,7 @@ print("Done loss plot")
 m = re.sub(".keras","",ofile)
 m = re.sub("/data6/avharris/ml_sz_clusters/models/","",m)
 f = re.sub(".jsonl","",input_fn)
-img_dir = "../test_imgs/"+m+"/"
+img_dir = "../test_imgs/"+m+"_"+f+"/"
 
 print(m)
 print(f)
@@ -399,7 +387,6 @@ else:
 
 cmap = "bwr"
 
-print("Before plotting residuals and predictions: " + str(time.time()))
 for inputs,labels in df_test.map(lambda x,y: (x,y)):
     larr = labels.numpy()
     iarr = inputs.numpy()
@@ -437,7 +424,7 @@ for inputs,labels in df_test.map(lambda x,y: (x,y)):
             fig = plt.figure()
             plt.imshow(T_norm,cmap = cmap)
             plt.colorbar()
-            #plt.clim(0.3,0.8)
+            plt.clim(0.3,0.8)
             plt.savefig(infile)
             plt.close(fig)
             T_min = maps_dict[ff]["min"]
@@ -455,33 +442,32 @@ for inputs,labels in df_test.map(lambda x,y: (x,y)):
             plt.close(fig)
         i+=1
 
-print("After plotting residuals and predictions: " + str(time.time()))
 print("Done input, labels, preds stamps")
 
 fig = plt.figure()
 res_avg_flat = res_flat/i
 plt.hist(res_avg_flat,range=[-0.006,0.006])
-plt.savefig("../plots/"+m+"_stack_res_hist.png")
+plt.savefig("../plots/"+f+"_"+m+"_stack_res_hist.png")
 plt.close(fig)
 
 fig = plt.figure()
 plt.imshow(res_tot/i)
 plt.colorbar()
-plt.savefig("../plots/"+m+"_stack_res.png")
+plt.savefig("../plots/"+f+"_"+m+"_stack_res.png")
 plt.close(fig)
 
 for ff in f_arr2:
     fig = plt.figure()
     plt.imshow(sub_tot[ff]/i)
     plt.colorbar()
-    plt.savefig("../plots/"+m+"_stack_sub_f"+flabels[ff]+".png")
+    plt.savefig("../plots/"+f+"_"+m+"_stack_sub_f"+flabels[ff]+".png")
     plt.close(fig)
     fig = plt.figure()
     plt.hist(sub_flat[ff]/i)
-    plt.savefig("../plots/"+m+"_stack_sub_hist_f"+flabels[ff]+".png")
+    plt.savefig("../plots/"+f+"_"+m+"_stack_sub_hist_f"+flabels[ff]+".png")
     plt.close(fig)
 print("done")
-print("Final time: " + str(time.time()))
+
 print("Done stacks of residuals and subtractions")
                    
 print("Trained CNN on file "+ f)
@@ -489,4 +475,3 @@ print("Num channels "+str(nchannels))
 print("Model with SeparableConv2D")
 print("Saved model as "+ofile)
 print("Loss plot is "+pltfile)
-
