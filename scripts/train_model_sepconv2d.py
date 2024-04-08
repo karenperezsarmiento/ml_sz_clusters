@@ -6,7 +6,6 @@ from tensorflow.keras import datasets as tfdatasets
 import datasets
 from tensorflow.keras.callbacks import LearningRateScheduler, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers.experimental.preprocessing import Normalization
 from datasets import load_dataset
 import numpy as np
 from tensorflow.keras import layers, Input, Model
@@ -21,10 +20,9 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import categorical_accuracy
 from tensorflow.keras.callbacks import LearningRateScheduler, ReduceLROnPlateau
 import tensorflow.keras.backend as K
-from tensorflow.keras.layers.experimental.preprocessing import Normalization
 import argparse as ap
-from pixell import reproject,enmap,utils
-import healpy as hp
+#from pixell import reproject,enmap,utils
+#import healpy as hp
 import re
 import time
 
@@ -36,7 +34,8 @@ args = parser.parse_args()
 input_fn = args.input_file
 nchannels = args.num_channels
 act_func = args.activation_func
-infile = "/data6/avharris/ml_sz_clusters/datasets/"+input_fn
+#infile = "/data6/kaper/ml_sz_clusters/datasets/"+input_fn
+infile = "/data6/avharris/ml_sz_clusters/datasets/tiny_5ch_noap.jsonl"
 
 data = load_dataset("json",data_files=infile,split="train")
 
@@ -298,18 +297,20 @@ class PrintLoss(tf.keras.callbacks.Callback):
 callbacks_list = [cp_callback, reduce_lr, PrintLR()]
 
 
-opt = Adam(learning_rate = 1e-5)
+opt = Adam(learning_rate = 1e-5) #1e-5 best
 model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
 
-print("Before fitting model")
+print("USING ABIGAIL'S DATASET")
 # Train the model on all available devices.
 history = model.fit(df_train, validation_data=df_test, epochs=5,callbacks=callbacks_list)
 
 print("_______________________")
 print("Done fitting model")
+"""
+
 ofile = re.sub(".jsonl",".keras",input_fn)
 pltfile = re.sub(".jsonl",".png",input_fn)
-ofile = "/data6/avharris/ml_sz_clusters/models/sep_conv2d_"+act_func+"_"+ofile
+ofile = "/data6/kaper/ml_sz_clusters/models/sep_conv2d_"+act_func+"_"+ofile
 pltfile = "../plots/sep_conv2d_"+act_func+"_"+pltfile
 model.save(ofile)
 
@@ -330,7 +331,7 @@ plt.close(fig)
 print("Done loss plot")
 
 m = re.sub(".keras","",ofile)
-m = re.sub("/data6/avharris/ml_sz_clusters/models/","",m)
+m = re.sub("/data6/kaper/ml_sz_clusters/models/","",m)
 f = re.sub(".jsonl","",input_fn)
 img_dir = "../test_imgs/"+m+"_"+f+"/"
 
@@ -475,3 +476,4 @@ print("Num channels "+str(nchannels))
 print("Model with SeparableConv2D")
 print("Saved model as "+ofile)
 print("Loss plot is "+pltfile)
+"""
