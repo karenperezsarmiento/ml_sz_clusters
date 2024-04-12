@@ -1,3 +1,4 @@
+print("here")
 import numpy as np
 import tensorflow as tf
 import keras
@@ -7,10 +8,9 @@ import matplotlib.pyplot as plt
 import re
 from pixell import reproject,enmap,utils
 import healpy as hp
-from scipy.stats import pearsonr
-import csv
 import argparse as ap
-
+print("Here")
+"""
 parser = ap.ArgumentParser(description="Have a neural network predict true cmb from labels of a dataset")
 parser.add_argument("-md", "--model", type=str, help="Filename of model")
 parser.add_argument("-af", "--act_func", type=str, help="Activation function of model")
@@ -19,8 +19,12 @@ args = parser.parse_args()
 model_fn = args.model
 act_func = args.act_func
 input_fn = args.data_fn
-
+"""
+model_fn = "sep_conv2d_linear_small_5ch_b_n5_noap.keras"
+act_func = "linear"
+input_fn = "small_5ch_b_n5_noap.jsonl"
 res = np.deg2rad(0.5 / 60.)
+print("Accepted inputs")
 
 def map_min_max(filename,res):
     shape,wcs = enmap.fullsky_geometry(res=res)
@@ -42,12 +46,12 @@ for i in range(len(files)):
         "min" : min_val,
         "max" : max_val,
     }
-
+print("Loading model..")
 img_dir = "../test_imgs_temp_" + act_func + "/"
 r_model = keras.models.load_model("/data6/avharris/ml_sz_clusters/models/"+model_fn)
 data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")
 ifile = re.sub(".jsonl","",input_fn)
-
+print("Model loaded")
 """
 Before running this script, ensure that in the ml_sz_clusters directory there are the following directories:
 /test_imgs_temp_ + act_func + /
@@ -63,7 +67,7 @@ Csv files storing important arrays are stored in /data/csv_files_ + act_func + /
 The filenames are of the form ifile + arr_name + .csv
 """
 
-
+print("Splitting dataset")
 train_testvalid = data.train_test_split(test_size=0.05)
 
 df_test = train_testvalid["test"].to_tf_dataset(
@@ -89,6 +93,7 @@ off_vals = []     # the values of the offset in radians for the declination angl
 off_vals.append([])   # off_norms[0][i] is the declination angle that corresponds to res_norms[i]
 off_vals.append([])   # off_norms[1][i] is the ascension angle that corresponds to res_norms[i]
 """
+print("Plotting predictions")
 for inputs,labels in df_test.map(lambda x,y: (x,y)):
     larr = np.array(labels)
     """

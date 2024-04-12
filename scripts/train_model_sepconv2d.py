@@ -21,21 +21,25 @@ from tensorflow.keras.metrics import categorical_accuracy
 from tensorflow.keras.callbacks import LearningRateScheduler, ReduceLROnPlateau
 import tensorflow.keras.backend as K
 import argparse as ap
-#from pixell import reproject,enmap,utils
-#import healpy as hp
+from pixell import reproject,enmap,utils
+import healpy as hp
 import re
 import time
+
+start = time.time()
 
 parser = ap.ArgumentParser(description="Train CNN, test and make plot")
 parser.add_argument("-if","--input_file",type=str,help="Name of input dataset file")
 parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 3 or 5)")
 parser.add_argument("-af","--activation_func",type=str,help="Activation function in CNN (relu,selu,linear,etc)")
+parser.add_argument("-ep","--epochs", type=int,help="Number of epochs to train")
 args = parser.parse_args()
 input_fn = args.input_file
 nchannels = args.num_channels
 act_func = args.activation_func
+num_epochs = int(args.epochs)
 #infile = "/data6/kaper/ml_sz_clusters/datasets/"+input_fn
-infile = "/data6/avharris/ml_sz_clusters/datasets/tiny_5ch_noap.jsonl"
+infile = "/data6/avharris/ml_sz_clusters/datasets/"+input_fn
 
 data = load_dataset("json",data_files=infile,split="train")
 
@@ -300,17 +304,15 @@ callbacks_list = [cp_callback, reduce_lr, PrintLR()]
 opt = Adam(learning_rate = 1e-5) #1e-5 best
 model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
 
-print("USING ABIGAIL'S DATASET")
 # Train the model on all available devices.
-history = model.fit(df_train, validation_data=df_test, epochs=5,callbacks=callbacks_list)
+history = model.fit(df_train, validation_data=df_test, epochs=num_epochs,callbacks=callbacks_list)
 
 print("_______________________")
 print("Done fitting model")
-"""
 
 ofile = re.sub(".jsonl",".keras",input_fn)
 pltfile = re.sub(".jsonl",".png",input_fn)
-ofile = "/data6/kaper/ml_sz_clusters/models/sep_conv2d_"+act_func+"_"+ofile
+ofile = "/data6/avharris/ml_sz_clusters/models/sep_conv2d_"+act_func+"_"+ofile
 pltfile = "../plots/sep_conv2d_"+act_func+"_"+pltfile
 model.save(ofile)
 
@@ -476,4 +478,4 @@ print("Num channels "+str(nchannels))
 print("Model with SeparableConv2D")
 print("Saved model as "+ofile)
 print("Loss plot is "+pltfile)
-"""
+print("Total time in hours: "+str((time.time()-start))*2.77778e-7)
