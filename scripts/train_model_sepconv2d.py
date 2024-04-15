@@ -30,17 +30,18 @@ start = time.time()
 
 parser = ap.ArgumentParser(description="Train CNN, test and make plot")
 parser.add_argument("-if","--input_file",type=str,help="Name of input dataset file")
-parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 3 or 5)")
+parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 2 or 3 or 5)")
 parser.add_argument("-af","--activation_func",type=str,help="Activation function in CNN (relu,selu,linear,etc)")
 parser.add_argument("-ep","--epochs", type=int,help="Number of epochs to train")
 args = parser.parse_args()
 input_fn = args.input_file
-nchannels = args.num_channels
+nchannels = int(args.num_channels)
 act_func = args.activation_func
 num_epochs = int(args.epochs)
 #infile = "/data6/kaper/ml_sz_clusters/datasets/"+input_fn
 infile = "/data6/avharris/ml_sz_clusters/datasets/"+input_fn
 
+print(nchannels)
 data = load_dataset("json",data_files=infile,split="train")
 
 batch_sz = 64
@@ -332,11 +333,12 @@ plt.savefig(pltfile)
 plt.close(fig)
 print("Done loss plot")
 
+
 m = re.sub(".keras","",ofile)
 m = re.sub("/data6/kaper/ml_sz_clusters/models/","",m)
 f = re.sub(".jsonl","",input_fn)
 img_dir = "../test_imgs/"+m+"_"+f+"/"
-
+"""
 print(m)
 print(f)
 
@@ -472,10 +474,10 @@ for ff in f_arr2:
 print("done")
 
 print("Done stacks of residuals and subtractions")
-                   
+"""                   
 print("Trained CNN on file "+ f)
 print("Num channels "+str(nchannels))
 print("Model with SeparableConv2D")
 print("Saved model as "+ofile)
 print("Loss plot is "+pltfile)
-print("Total time in hours: "+str((time.time()-start))*2.77778e-7)
+print("Total time in hours: "+str((time.time()-start)*2.77778e-7))

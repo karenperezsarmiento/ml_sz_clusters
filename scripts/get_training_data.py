@@ -182,17 +182,18 @@ with jsonlines.open(ofn,mode="w") as write_file:
         cutout_dict["name"]=str(idx[i])
         if (nchannels == 1) or (nchannels == 3):
             list_freqs = ["tot_93"]
-	elif nchannels == 2:
-	    list_freqs = ["tot_93","tot_145"]
+        elif nchannels == 2:
+            list_freqs = ["tot_93","tot_145"]
         elif nchannels == 5:
             list_freqs = ["tot_93","tot_145","tot_217"]
         for k in list_freqs:
             cutout = get_cutouts(ra[i],dec[i],maps_dict[k]["p_map"],width=width,res=res, apod_info=apod_info)
             cutout_norm = (cutout - maps_dict[k]["min"])/(maps_dict[k]["max"]-maps_dict[k]["min"])
-            if (nchannels == 5) or (nchannels == 3) or (nchannels == 2):
+            if (nchannels == 5) or (nchannels == 3) or ((nchannels == 2) and (k == "tot_145")):  #Stack onto existing layers
                 cutout_out = np.dstack((cutout_out,cutout_norm))
-            elif nchannels == 1:
+            elif (nchannels == 1) or ((nchannels == 2) and (k == "tot_93")):   #Set the first layer
                 cutout_out = cutout_norm
+               
         
         cutout_dict["tot"] = cutout_out.tolist()
         cutout_label = get_cutouts(ra[i],dec[i],maps_dict["tsz_8192"]["p_map"],width=width,res=res, apod_info=apod_info)

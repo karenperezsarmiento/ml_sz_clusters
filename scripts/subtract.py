@@ -1,4 +1,3 @@
-print("here")
 import numpy as np
 import tensorflow as tf
 import keras
@@ -9,22 +8,23 @@ import re
 from pixell import reproject,enmap,utils
 import healpy as hp
 import argparse as ap
-print("Here")
-"""
-parser = ap.ArgumentParser(description="Have a neural network predict true cmb from labels of a dataset")
-parser.add_argument("-md", "--model", type=str, help="Filename of model")
-parser.add_argument("-af", "--act_func", type=str, help="Activation function of model")
-parser.add_argument("-f", "--data_fn", type=str, help="Filename of dataset to predict from")
+
+print("Initialized")
+parser = ap.ArgumentParser(description="Create residuals and subtractions")
+parser.add_argument("-mf","--model_file",type=str,help="Model filename")
+parser.add_argument("-td","--test_dataset",type=str,help="Test dataset")
+parser.add_argument("-nc","--num_channels",type=int,help="Number of channels")
+
 args = parser.parse_args()
-model_fn = args.model
-act_func = args.act_func
-input_fn = args.data_fn
-"""
-model_fn = "sep_conv2d_linear_small_5ch_b_n5_noap.keras"
-act_func = "linear"
-input_fn = "small_5ch_b_n5_noap.jsonl"
+model_fn = args.model_file
+input_fn = args.test_dataset
+nchannels = args.num_channels
+print("Parsed arguments")
+m = re.sub(".keras","",model_fn)
+f = re.sub(".jsonl","",input_fn)
+img_dir = "../test_imgs_"+m+"_"+f+"/"
+
 res = np.deg2rad(0.5 / 60.)
-print("Accepted inputs")
 
 def map_min_max(filename,res):
     shape,wcs = enmap.fullsky_geometry(res=res)
@@ -35,10 +35,20 @@ def map_min_max(filename,res):
     return min_val, max_val
 
 maps_dict = {}
-files = ["tot_93","tot_145","tot_217","tsz_8192"]
-flabels = {2:"93",3:"145",4:"217"}
-f_arr = [2,3,4,5]
-n = {2:-4.2840e6,3:-2.7685e6,4:-2.1188e4}
+if nchannels == 5:
+    files = ["tot_93","tot_145","tot_217","tsz_8192"]
+    flabels = {2:"93",3:"145",4:"217"}
+    f_arr = [2,3,4,5]
+    f_arr2 = [2,3,4]
+    n = {2:-4.2840e6,3:-2.7685e6,4:-2.1188e4}
+else:
+    files = ["tot_93","tsz_8192"]
+    flabels = {2:"93"}
+    f_arr = [2,5]
+    f_arr2 = [2]
+    n = {2:-4.2840e6}
+
+print("Loading maps")
 for i in range(len(files)):
     f = "/data6/kaper/ml_sz_clusters/websky/"+ files[i] + ".fits"
     min_val, max_val = map_min_max(f,res)
@@ -46,29 +56,19 @@ for i in range(len(files)):
         "min" : min_val,
         "max" : max_val,
     }
-print("Loading model..")
-img_dir = "../test_imgs_temp_" + act_func + "/"
-r_model = keras.models.load_model("/data6/avharris/ml_sz_clusters/models/"+model_fn)
+
+if "linear" in model_fn:
+    act_func = "linear"
+elif "selu" in model_fn:
+    act_func = "selu"
+print("Before loading dataset")
+f = "/data6/avharris/ml_sz_clusters/models/"+model_fn
+print(f)
+r_model = keras.models.load_model(f)
 data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")
-ifile = re.sub(".jsonl","",input_fn)
-print("Model loaded")
-"""
-Before running this script, ensure that in the ml_sz_clusters directory there are the following directories:
-/test_imgs_temp_ + act_func + /
-/data/csv_files_ + act_func + /
-
-label, prediction, and residual images will be stored in /test_imgs_temp_ + act_func + /
-with filenames  ifile + i + desc + act_func +.png
-where i is an integer and desc is _res_sep_conv2d_ or _label_sep_conv2d_ or _predict_sep_conv2d_
-
-Plots of residuals stacked and histograms are stored in /plots/ with filenames starting with ifile + act_func
-
-Csv files storing important arrays are stored in /data/csv_files_ + act_func + /
-The filenames are of the form ifile + arr_name + .csv
-"""
-
-print("Splitting dataset")
-train_testvalid = data.train_test_split(test_size=0.05)
+print("loaded dataset")
+train_testvalid = data.train_test_split(test_size=0.9)
+print("Converting to tensorflow dataset")
 
 df_test = train_testvalid["test"].to_tf_dataset(
         columns=["tot"],
@@ -76,61 +76,71 @@ df_test = train_testvalid["test"].to_tf_dataset(
         batch_size=64,
         prefetch=False,
         shuffle=False)
+print("Making predictions")
 
 predictions = r_model.predict(df_test,batch_size=64)
+
+print("Plotting (let's see how this goes...)")
+
+print("img_dir:")
+print(img_dir)
+print()
+
 i = 0
+ifile = re.sub(".jsonl","",input_fn)
+print("ifile: ")
+print(ifile)
+print()
 Cy_min = maps_dict[5]["min"]
 Cy_max = maps_dict[5]["max"]
 res_flat = []
 res_tot = np.zeros((64,64))
 sub_tot = {2:np.zeros((64,64)),3:np.zeros((64,64)),4:np.zeros((64,64))}
 sub_flat = {2:[],3:[],4:[]}
-sub_norms = {2:[], 3:[], 4:[]}
-res_norms = []    # the norm of all pixels in the residual
-"""
-off_norms = []    # the norm of the offset in radians. off_norm[i] corresponds to res_norm[i]
-off_vals = []     # the values of the offset in radians for the declination angle and the ascension angle
-off_vals.append([])   # off_norms[0][i] is the declination angle that corresponds to res_norms[i]
-off_vals.append([])   # off_norms[1][i] is the ascension angle that corresponds to res_norms[i]
-"""
-print("Plotting predictions")
 for inputs,labels in df_test.map(lambda x,y: (x,y)):
-    larr = np.array(labels)
-    """
-    offset = np.array(labels["offset"])
-    off_vals[0].extend(offset[:,0])
-    off_vals[1].extend(offset[:,1])
-    off_norms.extend(np.linalg.norm(offset, axis = 1))
-    """
+    larr = labels.numpy()
     iarr = inputs.numpy()
     for l in range(larr.shape[0]):
-        resfile = img_dir+ifile + str(i)+"_res_sep_conv2d_"+act_func+".png"
+        resfile = img_dir+ifile + str(i)+"_res_sep_conv2d_"+m+".png"
+        if (i == 0):
+            print(resfile)
         lab = larr[l].reshape(64,64)
         pred = predictions[i].reshape(64,64)
         res = lab - pred
         res_tot = res_tot + res
         res_flat = np.append(res_flat,res.flatten())
-        res_norms.append(np.linalg.norm(res))
         fig = plt.figure()
         plt.imshow(res)
+        plt.colorbar()
+        #plt.clim(-0.03,0.03)
         plt.savefig(resfile)
         plt.close(fig)
-        labfile = img_dir+ifile + str(i)+"_label_sep_conv2d_"+act_func+".png"
+        labfile = img_dir+ifile + str(i)+"_label_sep_conv2d_"+m+".png"
+        if (i == 0):
+            print(labfile)
         fig = plt.figure()
         plt.imshow(lab)
+        plt.colorbar()
+        #plt.clim(0,0.25)
         plt.savefig(labfile)
         plt.close(fig)
-        predfile = img_dir+ifile+str(i)+"_predict_sep_conv2d_"+act_func+".png"
+        predfile = img_dir+ifile+str(i)+"_predict_sep_conv2d_"+m+".png"
+        if (i == 0):
+            print(predfile)
         fig = plt.figure()
         plt.imshow(pred)
+        plt.colorbar()
+        #plt.clim(0,0.25)
         plt.savefig(predfile)
         plt.close(fig)
-        for f in [2,3,4]:
-            subfile = img_dir+ifile + str(i)+"_sub_freq_"+flabels[f]+"_input_sep_conv2d_"+act_func+".png"
-            infile = img_dir+ifile + str(i)+"_freq_"+flabels[f]+"_input_sep_conv2d_"+act_func+".png"
+        for f in f_arr2:
+            subfile = img_dir+ifile + str(i)+"_sub_freq_"+flabels[f]+"_input_sep_conv2d_"+m+".png"
+            infile = img_dir+ifile + str(i)+"_freq_"+flabels[f]+"_input_sep_conv2d_"+m+".png"
             T_norm = iarr[l,:,:,f].reshape(64,64)
             fig = plt.figure()
             plt.imshow(T_norm)
+            plt.colorbar()
+            #plt.clim(0.3,0.8)
             plt.savefig(infile)
             plt.close(fig)
             T_min = maps_dict[f]["min"]
@@ -140,70 +150,35 @@ for inputs,labels in df_test.map(lambda x,y: (x,y)):
             T_cmb = T_tot - n[f]*Cy
             sub_tot[f] = sub_tot[f] + T_cmb
             sub_flat[f] = np.append(sub_flat[f],T_cmb.flatten())
-            sub_norms[f].append(np.linalg.norm(T_cmb))
             fig = plt.figure()
             plt.imshow(T_cmb)
+            plt.colorbar()
+            #plt.clim(-250,250)
             plt.savefig(subfile)
             plt.close(fig)
         i+=1
 
+
 fig = plt.figure()
-plt.hist(res_flat/i)
-plt.savefig("../plots/"+ifile+"_"+act_func+"_stack_res_hist.png")
+res_avg_flat = res_flat/i
+plt.hist(res_avg_flat,range=[-0.006,0.006])
+plt.savefig("../plots/"+ifile+"_"+m+"_stack_res_hist.png")
 plt.close(fig)
 
 fig = plt.figure()
 plt.imshow(res_tot/i)
-plt.savefig("../plots/"+ifile+"_"+act_func+"_stack_res.png")
+plt.colorbar()
+plt.savefig("../plots/"+ifile+"_"+m+"_stack_res.png")
 plt.close(fig)
 
-for f in [2,3,4]:
+for f in f_arr2:
     fig = plt.figure()
     plt.imshow(sub_tot[f]/i)
-    plt.savefig("../plots/"+ifile+"_"+act_func+"_stack_sub_f"+flabels[f]+".png")
+    plt.colorbar()
+    plt.savefig("../plots/"+ifile+"_"+m+"_stack_sub_f"+flabels[f]+".png")
     plt.close(fig)
     fig = plt.figure()
     plt.hist(sub_flat[f]/i)
-    plt.savefig("../plots/"+ifile+"_"+act_func+"_stack_sub_hist_f"+flabels[f]+".png")
+    plt.savefig("../plots/"+ifile+"_"+m+"_stack_sub_hist_f"+flabels[f]+".png")
     plt.close(fig)
-print("plots made")
-
-"""
-# Save important matrices to csv files
-# res_flat
-with open("../data/csv_files_"+act_func+"/"+ifile+"_res_flat.csv", "w", newline="") as f:
-    writer=csv.writer(f)
-    writer.writerow(res_flat.tolist())
-# res_tot
-with open("../data/csv_files_"+act_func+"/"+ifile+"_res_tot.csv", "w", newline="") as f:
-    writer=csv.writer(f)
-    writer.writerows(res_tot.tolist())
-# sub_tot
-with open("../data/csv_files_"+act_func+"/"+ifile+"_sub_tot.csv", "w", newline="") as f:
-    writer=csv.DictWriter(f, fieldnames=[2, 3, 4])
-    writer.writeheader()
-    writer.writerow(sub_tot)
-# sub_flat
-with open("../data/csv_files_"+act_func+"/"+ifile+"_sub_flat.csv", "w", newline="") as f:
-    writer=csv.DictWriter(f, fieldnames=[2, 3, 4])
-    writer.writeheader()
-    writer.writerow(sub_flat)
-# sub_norms
-with open("../data/csv_files_"+act_func+"/"+ifile+"_sub_norms.csv", "w", newline="") as f:
-    writer=csv.DictWriter(f, fieldnames=[2, 3, 4])
-    writer.writeheader()
-    writer.writerow(sub_norms)
-# res_norms
-with open("../data/csv_files_"+act_func+"/"+ifile+"_res_norms.csv", "w", newline="") as f:
-    writer=csv.writer(f)
-    writer.writerow(res_norms)
-# off_norms
-with open("../data/csv_files_"+act_func+"/"+ifile+"_off_norms.csv", "w", newline="") as f:
-    writer=csv.writer(f)
-    writer.writerow(off_norms)
-# off_vals
-with open("../data/csv_files_"+act_func+"/"+ifile+"_off_vals.csv", "w", newline="") as f:
-    writer=csv.writer(f)
-    writer.writerows(off_vals)
-"""
 print("done")
