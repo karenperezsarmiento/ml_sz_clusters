@@ -41,6 +41,12 @@ if nchannels == 5:
     f_arr = [2,3,4,5]
     f_arr2 = [2,3,4]
     n = {2:-4.2840e6,3:-2.7685e6,4:-2.1188e4}
+elif nchannels == 2:
+    files = ["tot_93","tot_145","tsz_8192"]
+    flabels = {0:"93", 1:"145"}
+    f_arr = [0, 1, 5]
+    f_arr2 = [0, 1]
+    n = {0:-4.2840e6, 1:-2.7685e6}
 else:
     files = ["tot_93","tsz_8192"]
     flabels = {2:"93"}
@@ -57,53 +63,44 @@ for i in range(len(files)):
         "max" : max_val,
     }
 
+print("Loading and splitting dataset")
 if "linear" in model_fn:
     act_func = "linear"
 elif "selu" in model_fn:
     act_func = "selu"
-print("Before loading dataset")
 f = "/data6/avharris/ml_sz_clusters/models/"+model_fn
-print(f)
 r_model = keras.models.load_model(f)
 data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")
-print("loaded dataset")
-train_testvalid = data.train_test_split(test_size=0.9)
-print("Converting to tensorflow dataset")
-
+train_testvalid = data.train_test_split(test_size=0.1, shuffle=False)
 df_test = train_testvalid["test"].to_tf_dataset(
-        columns=["tot"],
-        label_cols=["tsz_8192"],
-        batch_size=64,
-        prefetch=False,
-        shuffle=False)
-print("Making predictions")
+    columns=["tot"],
+    label_cols=["tsz_8192"],
+    batch_size=64,
+    prefetch=False,
+    shuffle=False)
+
+print("Making predictions on validation set")
 
 predictions = r_model.predict(df_test,batch_size=64)
 
-print("Plotting (let's see how this goes...)")
-
-print("img_dir:")
-print(img_dir)
-print()
-
+print("Plotting")
 i = 0
 ifile = re.sub(".jsonl","",input_fn)
-print("ifile: ")
-print(ifile)
-print()
 Cy_min = maps_dict[5]["min"]
 Cy_max = maps_dict[5]["max"]
+if nchannels == 5:
+    sub_tot = {2:np.zeros((64,64)),3:np.zeros((64,64)),4:np.zeros((64,64))}
+    sub_flat = {2:[],3:[],4:[]}
+elif nchannels == 2:
+    sub_tot = {0:np.zeros((64,64)),1:np.zeros((64,64))}
+    sub_flat = {0:[],1:[]}
 res_flat = []
 res_tot = np.zeros((64,64))
-sub_tot = {2:np.zeros((64,64)),3:np.zeros((64,64)),4:np.zeros((64,64))}
-sub_flat = {2:[],3:[],4:[]}
 for inputs,labels in df_test.map(lambda x,y: (x,y)):
     larr = labels.numpy()
     iarr = inputs.numpy()
     for l in range(larr.shape[0]):
         resfile = img_dir+ifile + str(i)+"_res_sep_conv2d_"+m+".png"
-        if (i == 0):
-            print(resfile)
         lab = larr[l].reshape(64,64)
         pred = predictions[i].reshape(64,64)
         res = lab - pred
@@ -116,8 +113,6 @@ for inputs,labels in df_test.map(lambda x,y: (x,y)):
         plt.savefig(resfile)
         plt.close(fig)
         labfile = img_dir+ifile + str(i)+"_label_sep_conv2d_"+m+".png"
-        if (i == 0):
-            print(labfile)
         fig = plt.figure()
         plt.imshow(lab)
         plt.colorbar()
@@ -125,8 +120,6 @@ for inputs,labels in df_test.map(lambda x,y: (x,y)):
         plt.savefig(labfile)
         plt.close(fig)
         predfile = img_dir+ifile+str(i)+"_predict_sep_conv2d_"+m+".png"
-        if (i == 0):
-            print(predfile)
         fig = plt.figure()
         plt.imshow(pred)
         plt.colorbar()

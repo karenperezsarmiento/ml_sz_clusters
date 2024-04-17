@@ -47,13 +47,13 @@ data = load_dataset("json",data_files=infile,split="train")
 batch_sz = 64
 
 freq_key = "tot"
-train_testvalid = data.train_test_split(test_size=0.1)
+train_testvalid = data.train_test_split(test_size=0.1, shuffle=False)
 df_train = train_testvalid["train"].to_tf_dataset(
     columns=[freq_key],
     label_cols=["tsz_8192"],
     batch_size=batch_sz,
     prefetch=False,
-    shuffle=True)
+    shuffle=False)
 df_test = train_testvalid["test"].to_tf_dataset(
     columns=[freq_key],
     label_cols=["tsz_8192"],
@@ -474,10 +474,10 @@ for ff in f_arr2:
 print("done")
 
 print("Done stacks of residuals and subtractions")
-"""                   
+"""                
 print("Trained CNN on file "+ f)
 print("Num channels "+str(nchannels))
 print("Model with SeparableConv2D")
 print("Saved model as "+ofile)
 print("Loss plot is "+pltfile)
-print("Total time in hours: "+str((time.time()-start)*2.77778e-7))
+print("Total time in hours: "+str((time.time()-start)*0.000277778))
