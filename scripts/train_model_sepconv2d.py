@@ -30,7 +30,7 @@ start = time.time()
 
 parser = ap.ArgumentParser(description="Train CNN, test and make plot")
 parser.add_argument("-if","--input_file",type=str,help="Name of input dataset file")
-parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 2 or 3 or 5)")
+parser.add_argument("-nc","--num_channels",type=int,help="Number of channels in input cutout (1 or 2 or 3 or 5 or 6)")
 parser.add_argument("-af","--activation_func",type=str,help="Activation function in CNN (relu,selu,linear,etc)")
 parser.add_argument("-ep","--epochs", type=int,help="Number of epochs to train")
 args = parser.parse_args()
@@ -38,16 +38,17 @@ input_fn = args.input_file
 nchannels = int(args.num_channels)
 act_func = args.activation_func
 num_epochs = int(args.epochs)
-#infile = "/data6/kaper/ml_sz_clusters/datasets/"+input_fn
 infile = "/data6/avharris/ml_sz_clusters/datasets/"+input_fn
 
-print(nchannels)
-data = load_dataset("json",data_files=infile,split="train")
+data = load_dataset("json",data_files=infile,split="train")   # Loads the dataset into a HuggingFace Dataset
 
 batch_sz = 64
 
 freq_key = "tot"
+# Splits the dataset into a training set and a validation set
 train_testvalid = data.train_test_split(test_size=0.1, shuffle=False)
+
+# Converts the training and validation sets into a Tensorflow Dataset
 df_train = train_testvalid["train"].to_tf_dataset(
     columns=[freq_key],
     label_cols=["tsz_8192"],
@@ -64,6 +65,8 @@ df_test = train_testvalid["test"].to_tf_dataset(
 N_CLASSES = 1
 window_function = 3
 droupout_rate = 0.00
+
+# This function creates the model given the shape of the inputs
 def ResUNet(img_shape):
     inputs = Input(shape = img_shape)
     #tabs_input = Input(shape = img_shape)
@@ -282,14 +285,21 @@ def ResUNet(img_shape):
 # Open a strategy scope.
 #with strategy.scope():
 
-model = ResUNet((64,64,nchannels))
+# Call the function which constructs the model
+if nchannels == 6:
+    model =  ResUNet((64,64,3))
+else:
+    model = ResUNet((64,64,nchannels))
 print (model.summary())
 
+# Defines where "checkpoints" are saved
 cp_path = "../checkpoints/"+act_func+"/sep_conv2d_"+act_func+"_"+re.sub(".jsonl","",input_fn)+"_cp-{epoch:04d}.ckpt"
 cp_callback = tf.keras.callbacks.ModelCheckpoint(cp_path,save_weights_only=True,verbose=1,save_freq='epoch')
 
+# Reduces the learning rate under certain conditions in order to improve performance
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_delta=1e-10, cooldown=1, min_lr=0.)
 
+# Define "callbacks" which the fit function will print after every epoch so you can get an idea of what's going on
 class PrintLR(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         print('\nLearning rate for epoch {} is {}'.format(epoch + 1, model.optimizer.lr.numpy()))
@@ -298,25 +308,30 @@ class PrintLoss(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         if epoch > 2:
             print('\nLoss for epoch {} is {}'.format(epoch + 1, model.history.history['loss'][-1]))
-
 callbacks_list = [cp_callback, reduce_lr, PrintLR()]
 
 
+# Defines the learning rate
 opt = Adam(learning_rate = 1e-5) #1e-5 best
-model.compile(optimizer=opt, loss='mean_squared_error',metrics=["mse"])
 
-# Train the model on all available devices.
+# Defines the loss function
+model.compile(optimizer=opt, loss='mean_absolute_error',metrics=["mean_absolute_error"])
+
+# Train the model. This line will take hours to run on a small dataset
 history = model.fit(df_train, validation_data=df_test, epochs=num_epochs,callbacks=callbacks_list)
 
 print("_______________________")
 print("Done fitting model")
 
+
+# Defines output file locations for the model and for plots
 ofile = re.sub(".jsonl",".keras",input_fn)
 pltfile = re.sub(".jsonl",".png",input_fn)
 ofile = "/data6/avharris/ml_sz_clusters/models/sep_conv2d_"+act_func+"_"+ofile
 pltfile = "../plots/sep_conv2d_"+act_func+"_"+pltfile
 model.save(ofile)
 
+# Plots the loss on the training and validation set as a function of the number of epochs
 #history= model.history
 print(history.history.keys())
 fig = plt.figure()  

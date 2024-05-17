@@ -34,6 +34,7 @@ def map_min_max(filename,res):
     max_val = np.max(p_map)
     return min_val, max_val
 
+
 maps_dict = {}
 if nchannels == 5:
     files = ["tot_93","tot_145","tot_217","tsz_8192"]
@@ -47,6 +48,12 @@ elif nchannels == 2:
     f_arr = [0, 1, 5]
     f_arr2 = [0, 1]
     n = {0:-4.2840e6, 1:-2.7685e6}
+elif nchannels == 6:
+    files = ["tot_93","tot_145", "tot_217","tsz_8192"]
+    flabels = {0:"93", 1:"145", 2:"217"}
+    f_arr = [0, 1, 2, 5]
+    f_arr2 = [0, 1, 2]
+    n = {0:-4.2840e6, 1:-2.7685e6, 2:-2.1188e4}
 else:
     files = ["tot_93","tsz_8192"]
     flabels = {2:"93"}
@@ -70,17 +77,16 @@ elif "selu" in model_fn:
     act_func = "selu"
 f = "/data6/avharris/ml_sz_clusters/models/"+model_fn
 r_model = keras.models.load_model(f)
-data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")
-train_testvalid = data.train_test_split(test_size=0.1, shuffle=False)
+data = load_dataset("json",data_files="/data6/avharris/ml_sz_clusters/datasets/"+input_fn,split="train")  # Loads dataset
+train_testvalid = data.train_test_split(test_size=0.1, shuffle=False)   # Splits in the same way that was done for training
 df_test = train_testvalid["test"].to_tf_dataset(
     columns=["tot"],
     label_cols=["tsz_8192"],
     batch_size=64,
     prefetch=False,
-    shuffle=False)
+    shuffle=False)   # Converts the validation set to a tensorflow dataset
 
 print("Making predictions on validation set")
-
 predictions = r_model.predict(df_test,batch_size=64)
 
 print("Plotting")
@@ -91,6 +97,9 @@ Cy_max = maps_dict[5]["max"]
 if nchannels == 5:
     sub_tot = {2:np.zeros((64,64)),3:np.zeros((64,64)),4:np.zeros((64,64))}
     sub_flat = {2:[],3:[],4:[]}
+elif nchannels == 6:
+    sub_tot = {0:np.zeros((64,64)),1:np.zeros((64,64)),2:np.zeros((64,64))}
+    sub_flat = {0:[],1:[],2:[]}
 elif nchannels == 2:
     sub_tot = {0:np.zeros((64,64)),1:np.zeros((64,64))}
     sub_flat = {0:[],1:[]}
@@ -100,6 +109,7 @@ for inputs,labels in df_test.map(lambda x,y: (x,y)):
     larr = labels.numpy()
     iarr = inputs.numpy()
     for l in range(larr.shape[0]):
+        # Prints predictions, labels, and the residuals between the two 
         resfile = img_dir+ifile + str(i)+"_res_sep_conv2d_"+m+".png"
         lab = larr[l].reshape(64,64)
         pred = predictions[i].reshape(64,64)
